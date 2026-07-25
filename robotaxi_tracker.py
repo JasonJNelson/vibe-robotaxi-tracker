@@ -10,7 +10,6 @@ import time
 from datetime import datetime
 import folium
 from streamlit_folium import st_folium
-from folium.plugins import MarkerCluster
 
 # Page config
 st.set_page_config(
@@ -251,14 +250,15 @@ def main():
                 st.success(f"Added {sid}!")
                 st.rerun()
 
+    # Auto-refresh: only update when interval elapsed (no continuous sleep loop)
     if st.session_state.auto_refresh:
         time_since = (datetime.now() - st.session_state.last_update).total_seconds()
-        if time_since > 7:
+        if time_since > 8:
             simulate_live_update()
             st.rerun()
         else:
-            time.sleep(2)
-            st.rerun()
+            remaining = max(0, 8 - int(time_since))
+            st.caption(f"Next live update in ~{remaining}s (toggle LIVE off to stop)")
 
 
 if __name__ == "__main__":
