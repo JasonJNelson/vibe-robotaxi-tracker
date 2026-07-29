@@ -193,8 +193,12 @@ def main():
     with left:
         st.subheader("🗺️ Live Map • Las Vegas Metro")
         if not filtered.empty:
-            m = create_map(filtered)
-            st_folium(m, width=None, height=520, returned_objects=[])
+            try:
+                m = create_map(filtered)
+                st_folium(m, width=None, height=520, returned_objects=[], key=f"map_{len(filtered)}")
+            except Exception as e:
+                st.error(f"Map render error: {e}")
+                st.info("Try clicking Force Live Update or refresh the page.")
         else:
             st.info("No vehicles match the current filters.")
 
@@ -253,13 +257,16 @@ def main():
 
     # Real-time polling via streamlit-autorefresh
     if st.session_state.auto_refresh:
-        count = st_autorefresh(interval=5000, key="live_refresh")
-        if "last_refresh_count" not in st.session_state:
-            st.session_state.last_refresh_count = 0
-        if count > st.session_state.last_refresh_count:
-            simulate_live_update()
-            st.session_state.last_refresh_count = count
-        st.caption(f"🔴 LIVE — auto-updating every 5s (#{count})")
+        try:
+            count = st_autorefresh(interval=5000, key="live_refresh")
+            if "last_refresh_count" not in st.session_state:
+                st.session_state.last_refresh_count = 0
+            if count > st.session_state.last_refresh_count:
+                simulate_live_update()
+                st.session_state.last_refresh_count = count
+            st.caption(f"🔴 LIVE — auto-updating every 5s (#{count})")
+        except Exception:
+            st.caption("🔴 LIVE mode on (click Force Live Update if map freezes)")
     else:
         st.caption("LIVE mode off — toggle above or click Force Live Update")
 
