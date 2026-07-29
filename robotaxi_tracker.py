@@ -250,16 +250,12 @@ def main():
                 st.success(f"Added {sid}!")
                 st.rerun()
 
-    # Safe auto-refresh: only triggers when interval exceeded
+    # LIVE mode is indicator only — updates via Force Live Update button
+    # (prevents automatic st.rerun loops that cause runtime errors)
     if st.session_state.auto_refresh:
-        time_since = (datetime.now() - st.session_state.last_update).total_seconds()
-        if time_since > 10:
-            simulate_live_update()
-            st.toast("Live update applied", icon="🔄")
-            st.rerun()
-        else:
-            remaining = max(0, 10 - int(time_since))
-            st.caption(f"LIVE mode on — next auto update in ~{remaining}s (or click Force Live Update)")
+        st.caption("LIVE mode on — click **Force Live Update** to refresh positions")
+    else:
+        st.caption("LIVE mode off — toggle above or click Force Live Update")
 
 
 if __name__ == "__main__":
