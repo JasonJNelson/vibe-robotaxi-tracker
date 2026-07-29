@@ -251,13 +251,15 @@ def main():
                 st.success(f"Added {sid}!")
                 st.rerun()
 
-    # Real-time polling via streamlit-autorefresh (safe, no crash loops)
+    # Real-time polling via streamlit-autorefresh
     if st.session_state.auto_refresh:
-        # Refresh every 5 seconds
         count = st_autorefresh(interval=5000, key="live_refresh")
-        if count > 0:
+        if "last_refresh_count" not in st.session_state:
+            st.session_state.last_refresh_count = 0
+        if count > st.session_state.last_refresh_count:
             simulate_live_update()
-        st.caption(f"🔴 LIVE — auto-updating every 5s (refresh #{count})")
+            st.session_state.last_refresh_count = count
+        st.caption(f"🔴 LIVE — auto-updating every 5s (#{count})")
     else:
         st.caption("LIVE mode off — toggle above or click Force Live Update")
 
