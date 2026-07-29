@@ -10,6 +10,7 @@ import time
 from datetime import datetime
 import folium
 from streamlit_folium import st_folium
+from streamlit_autorefresh import st_autorefresh
 
 # Page config
 st.set_page_config(
@@ -80,7 +81,7 @@ def init_session():
     if "last_update" not in st.session_state:
         st.session_state.last_update = datetime.now()
     if "auto_refresh" not in st.session_state:
-        st.session_state.auto_refresh = False
+        st.session_state.auto_refresh = True
 
 
 def simulate_live_update():
@@ -250,10 +251,13 @@ def main():
                 st.success(f"Added {sid}!")
                 st.rerun()
 
-    # LIVE mode is indicator only — updates via Force Live Update button
-    # (prevents automatic st.rerun loops that cause runtime errors)
+    # Real-time polling via streamlit-autorefresh (safe, no crash loops)
     if st.session_state.auto_refresh:
-        st.caption("LIVE mode on — click **Force Live Update** to refresh positions")
+        # Refresh every 5 seconds
+        count = st_autorefresh(interval=5000, key="live_refresh")
+        if count > 0:
+            simulate_live_update()
+        st.caption(f"🔴 LIVE — auto-updating every 5s (refresh #{count})")
     else:
         st.caption("LIVE mode off — toggle above or click Force Live Update")
 
