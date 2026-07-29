@@ -1,48 +1,57 @@
 """
 Vibe Robotaxi Tracker - Las Vegas
-Pure Python Streamlit version of the live robotaxi dashboard.
+=================================
+Live dashboard for Zoox, Waymo, and Cybercab robotaxis.
+Pure Python + Streamlit + Folium.
+
+Run:
+    pip install -r requirements_streamlit.txt
+    streamlit run robotaxi_tracker.py
 """
 
 import streamlit as st
 import pandas as pd
 import random
-import time
 from datetime import datetime
 import folium
 from streamlit_folium import st_folium
-from streamlit_autorefresh import st_autorefresh
 
-# Page config
+# Optional real-time polling (install with: pip install streamlit-autorefresh)
+try:
+    from streamlit_autorefresh import st_autorefresh
+    HAS_AUTOREFRESH = True
+except ImportError:
+    HAS_AUTOREFRESH = False
+
+# ---------------------------------------------------------------------------
+# Page setup
+# ---------------------------------------------------------------------------
 st.set_page_config(
     page_title="Vibe Robotaxi Tracker | Las Vegas",
     page_icon="🤖",
     layout="wide",
-    initial_sidebar_state="expanded"
+    initial_sidebar_state="expanded",
 )
 
-# Custom CSS for dark theme vibe
-st.markdown("""
-<style>
-    .stApp {
-        background-color: #09090b;
-        color: #e4e4e7;
-    }
-    .stMetric {
-        background-color: #18181b;
-        border: 1px solid #27272a;
-        border-radius: 16px;
-        padding: 12px;
-    }
-    h1, h2, h3 {
-        font-family: 'Inter', sans-serif;
-    }
-    .provider-zoox { color: #00f0ff; }
-    .provider-waymo { color: #a855f7; }
-    .provider-cybercab { color: #e82127; }
-</style>
-""", unsafe_allow_html=True)
+st.markdown(
+    """
+    <style>
+        .stApp { background-color: #09090b; color: #e4e4e7; }
+        .stMetric {
+            background-color: #18181b;
+            border: 1px solid #27272a;
+            border-radius: 16px;
+            padding: 12px;
+        }
+        h1, h2, h3 { font-family: 'Inter', sans-serif; }
+    </style>
+    """,
+    unsafe_allow_html=True,
+)
 
-# Initial vehicle data
+# ---------------------------------------------------------------------------
+# Data
+# ---------------------------------------------------------------------------
 INITIAL_VEHICLES = [
     {"id": "ZOX-LV-042", "provider": "Zoox", "status": "Active", "lat": 36.1147, "lng": -115.1728, "location": "Las Vegas Strip (Bellagio)", "last_updated": "Just now", "speed": 28, "trips": 312},
     {"id": "ZOX-LV-019", "provider": "Zoox", "status": "Charging", "lat": 36.0801, "lng": -115.1534, "location": "Harry Reid Airport Hub", "last_updated": "9 min ago", "speed": 0, "trips": 421},
@@ -68,13 +77,9 @@ PROVIDER_COLORS = {
     "Cybercab": "#e82127",
 }
 
-STATUS_COLORS = {
-    "Active": "🟢",
-    "Idle": "🟡",
-    "Charging": "🔵",
-}
-
-
+# ---------------------------------------------------------------------------
+# Session state
+# ---------------------------------------------------------------------------
 def init_session():
     if "vehicles" not in st.session_state:
         st.session_state.vehicles = [v.copy() for v in INITIAL_VEHICLES]
@@ -82,12 +87,18 @@ def init_session():
         st.session_state.last_update = datetime.now()
     if "auto_refresh" not in st.session_state:
         st.session_state.auto_refresh = True
+    if "last_refresh_count" not in st.session_state:
+        st.session_state.last_refresh_count = 0
+    if "show_submit" not in st.session_state:
+        st.session_state.show_submit = False
 
 
+# ---------------------------------------------------------------------------
+# Simulation
+# ---------------------------------------------------------------------------
 def simulate_live_update():
-    """Simulate movement and status changes for active vehicles."""
-    vehicles = st.session_state.vehicles
-    for v in vehicles:
+    """Move active vehicles and occasionally change status."""
+    for v in st.session_state.vehicles:
         if v["status"] == "Active":
             v["lat"] += (random.random() - 0.5) * 0.004
             v["lng"] += (random.random() - 0.5) * 0.004
@@ -97,28 +108,28 @@ def simulate_live_update():
             if random.random() < 0.25:
                 v["trips"] += 1
             v["last_updated"] = "Just now"
-        elif random.random() < 0.05:
-            if v["status"] == "Idle" and random.random() < 0.3:
-                v["status"] = "Active"
-                v["speed"] = random.randint(15, 30)
-                v["last_updated"] = "Just now"
+        elif random.random() < 0.05 and v["status"] == "Idle":
+            v["status"] = "Active"
+            v["speed"] = random.randint(15, 30)
+            v["last_updated"] = "Just now"
     st.session_state.last_update = datetime.now()
 
 
-def create_map(df):
-    """Create Folium map centered on Las Vegas."""
+# ---------------------------------------------------------------------------
+# Map
+# ---------------------------------------------------------------------------
+def create_map(df: pd.DataFrame) -> folium.Map:
     m = folium.Map(
         location=[36.15, -115.15],
         zoom_start=12,
         tiles="CartoDB dark_matter",
         control_scale=True,
     )
-
     for _, row in df.iterrows():
         color = PROVIDER_COLORS.get(row["provider"], "#ffffff")
-        popup_html = f"""
+        popup = f"""
         <div style="font-family: Inter, sans-serif; min-width: 180px;">
-            <b style="font-size: 14px;">{row['id']}</b><br>
+            <b style="font-size:14px;">{row['id']}</b><br>
             <span style="color:{color}; font-weight:600;">{row['provider']}</span> • {row['status']}<br>
             📍 {row['location']}<br>
             🚀 {row['speed']} mph • 🚕 {row['trips']} trips<br>
@@ -133,31 +144,33 @@ def create_map(df):
             fill=True,
             fill_color=color,
             fill_opacity=0.9,
-            popup=folium.Popup(popup_html, max_width=250),
+            popup=folium.Popup(popup, max_width=250),
             tooltip=f"{row['id']} ({row['provider']})",
         ).add_to(m)
-
     return m
 
 
+# ---------------------------------------------------------------------------
+# Main app
+# ---------------------------------------------------------------------------
 def main():
     init_session()
 
+    # Header
     col1, col2 = st.columns([3, 1])
     with col1:
         st.title("🤖 Vibe Robotaxi Tracker")
-        st.caption("Live autonomous vehicle tracking • Las Vegas, NV • Pure Python Edition")
+        st.caption("Live autonomous vehicle tracking • Las Vegas, NV")
     with col2:
         st.write("")
         auto = st.toggle("🔴 LIVE Auto-Refresh", value=st.session_state.auto_refresh)
         st.session_state.auto_refresh = auto
 
-    vehicles = st.session_state.vehicles
-    df = pd.DataFrame(vehicles)
-
-    active_count = len(df[df["status"] == "Active"])
-    total_trips = df["trips"].sum()
-    cybercab_trips = df[df["provider"] == "Cybercab"]["trips"].sum()
+    # Metrics
+    df = pd.DataFrame(st.session_state.vehicles)
+    active_count = int((df["status"] == "Active").sum())
+    total_trips = int(df["trips"].sum())
+    cybercab_trips = int(df.loc[df["provider"] == "Cybercab", "trips"].sum())
     total_spotted = len(df)
 
     m1, m2, m3, m4 = st.columns(4)
@@ -168,11 +181,12 @@ def main():
 
     st.divider()
 
+    # Filters
     f1, f2, f3 = st.columns([1, 1, 2])
     with f1:
-        provider_filter = st.selectbox("Provider", ["All", "Zoox", "Waymo", "Cybercab"], index=0)
+        provider_filter = st.selectbox("Provider", ["All", "Zoox", "Waymo", "Cybercab"])
     with f2:
-        status_filter = st.selectbox("Status", ["All", "Active", "Idle", "Charging"], index=0)
+        status_filter = st.selectbox("Status", ["All", "Active", "Idle", "Charging"])
     with f3:
         search = st.text_input("Search ID or Location", placeholder="e.g. ZOX-LV or Bellagio")
 
@@ -188,41 +202,39 @@ def main():
         )
         filtered = filtered[mask]
 
+    # Map + Table
     left, right = st.columns([1.4, 1])
 
     with left:
         st.subheader("🗺️ Live Map • Las Vegas Metro")
-        if not filtered.empty:
+        if filtered.empty:
+            st.info("No vehicles match the current filters.")
+        else:
             try:
                 m = create_map(filtered)
                 st_folium(m, width=None, height=520, returned_objects=[], key=f"map_{len(filtered)}")
             except Exception as e:
-                st.error(f"Map render error: {e}")
-                st.info("Try clicking Force Live Update or refresh the page.")
-        else:
-            st.info("No vehicles match the current filters.")
+                st.error(f"Map error: {e}")
+                st.info("Click Force Live Update or refresh the page.")
 
     with right:
-        st.subheader(f"📋 Live Registry  ({len(filtered)} vehicles)")
-        display_df = filtered[["id", "provider", "status", "location", "speed", "trips", "last_updated"]].copy()
-        display_df = display_df.rename(columns={
-            "id": "ID",
-            "provider": "Provider",
-            "status": "Status",
-            "location": "Location",
-            "speed": "Speed (mph)",
-            "trips": "Trips",
-            "last_updated": "Updated",
-        })
-        st.dataframe(
-            display_df,
-            use_container_width=True,
-            height=480,
-            hide_index=True,
+        st.subheader(f"📋 Live Registry ({len(filtered)} vehicles)")
+        display = filtered[["id", "provider", "status", "location", "speed", "trips", "last_updated"]].rename(
+            columns={
+                "id": "ID",
+                "provider": "Provider",
+                "status": "Status",
+                "location": "Location",
+                "speed": "Speed (mph)",
+                "trips": "Trips",
+                "last_updated": "Updated",
+            }
         )
+        st.dataframe(display, use_container_width=True, height=480, hide_index=True)
 
+    # Controls
     st.divider()
-    c1, c2, c3 = st.columns([1, 1, 2])
+    c1, c2, _ = st.columns([1, 1, 2])
     with c1:
         if st.button("🔄 Force Live Update", use_container_width=True):
             simulate_live_update()
@@ -231,14 +243,14 @@ def main():
         if st.button("➕ Submit Spotting", use_container_width=True):
             st.session_state.show_submit = True
 
-    if st.session_state.get("show_submit", False):
+    # Submit form
+    if st.session_state.show_submit:
         with st.form("submit_form"):
             st.subheader("Submit Live Spotting")
             sid = st.text_input("Vehicle ID", value="ZOX-LV-NEW")
             sprov = st.selectbox("Provider", ["Zoox", "Waymo", "Cybercab"])
             sstat = st.selectbox("Status", ["Active", "Idle", "Charging"])
-            submitted = st.form_submit_button("Submit to Live Feed")
-            if submitted:
+            if st.form_submit_button("Submit to Live Feed"):
                 new_v = {
                     "id": sid,
                     "provider": sprov,
@@ -255,18 +267,18 @@ def main():
                 st.success(f"Added {sid}!")
                 st.rerun()
 
-    # Real-time polling via streamlit-autorefresh
-    if st.session_state.auto_refresh:
+    # Auto-refresh (safe)
+    if st.session_state.auto_refresh and HAS_AUTOREFRESH:
         try:
             count = st_autorefresh(interval=5000, key="live_refresh")
-            if "last_refresh_count" not in st.session_state:
-                st.session_state.last_refresh_count = 0
             if count > st.session_state.last_refresh_count:
                 simulate_live_update()
                 st.session_state.last_refresh_count = count
             st.caption(f"🔴 LIVE — auto-updating every 5s (#{count})")
         except Exception:
-            st.caption("🔴 LIVE mode on (click Force Live Update if map freezes)")
+            st.caption("🔴 LIVE mode on — click Force Live Update if needed")
+    elif st.session_state.auto_refresh:
+        st.caption("🔴 LIVE mode on — install streamlit-autorefresh for auto updates, or click Force Live Update")
     else:
         st.caption("LIVE mode off — toggle above or click Force Live Update")
 
