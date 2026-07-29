@@ -80,7 +80,7 @@ def init_session():
     if "last_update" not in st.session_state:
         st.session_state.last_update = datetime.now()
     if "auto_refresh" not in st.session_state:
-        st.session_state.auto_refresh = True
+        st.session_state.auto_refresh = False
 
 
 def simulate_live_update():
@@ -250,15 +250,16 @@ def main():
                 st.success(f"Added {sid}!")
                 st.rerun()
 
-    # Auto-refresh: only update when interval elapsed (no continuous sleep loop)
+    # Safe auto-refresh: only triggers when interval exceeded
     if st.session_state.auto_refresh:
         time_since = (datetime.now() - st.session_state.last_update).total_seconds()
-        if time_since > 8:
+        if time_since > 10:
             simulate_live_update()
+            st.toast("Live update applied", icon="🔄")
             st.rerun()
         else:
-            remaining = max(0, 8 - int(time_since))
-            st.caption(f"Next live update in ~{remaining}s (toggle LIVE off to stop)")
+            remaining = max(0, 10 - int(time_since))
+            st.caption(f"LIVE mode on — next auto update in ~{remaining}s (or click Force Live Update)")
 
 
 if __name__ == "__main__":
